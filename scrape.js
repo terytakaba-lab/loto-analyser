@@ -5,74 +5,56 @@ const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'loto7-analyser';
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 
-// ========== スクレイピング ==========
 async function scrape() {
   console.log('Fetching loto7 data...');
 
   const res = await fetch('https://www.ohtashp.com/topics/takarakuji/loto7/', {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Loto7Scraper/2.0)' }
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
   });
 
   if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
 
   const html = await res.text();
   console.log(`HTML length: ${html.length}`);
-  const hasKai = html.includes('第672回') || html.includes('第671回');
-  console.log(`Contains 第NNN回: ${hasKai}`);
 
   const $ = cheerio.load(html);
-  console.log(`Tables: ${$('table').length}, TR: ${$('table tr').length}`);
-
-  // デバッグ: 最初のTRのセルを表示
-  const firstRow = $('table tr').first();
-  const firstCells = firstRow.find('td').map((_, td) => $(td).text().trim()).get();
-  console.log('First row cells:', firstCells.slice(0, 5));
-
   const entries = [];
 
-  // テーブル行を解析
-  // 構造: 回別 | 抽選日 | 本数字×7 | bonus×2 | 1等口数 | 当せん金 | キャリーオーバー
-  $('table tr').each((_, row) => {
-    const cells = $(row).find('td').map((_, td) => $(td).text().trim()).get();
-
-    // 「第NNN回」パターンを検出
-    const roundMatch = cells[0]?.match(/第(\d+)回/);
-    const dateMatch = cells[1]?.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  // tr行のテキスト全体から解析
+  $('tr').each((_, row) => {
+    const text = $(row).text().replace(/\s+/g, ' ').trim();
+    const roundMatch = text.match(/第(\d+)回/);
+    const dateMatch = text.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
 
     if (!roundMatch || !dateMatch) return;
 
-    const numbers = [];
-    const bonuses = [];
+    // 日付以降の数字を抽出
+    const dateStr = dateMatch[0];
+    const afterDate = text.slice(text.indexOf(dateStr) + dateStr.length);
+    const allNums = [...afterDate.matchAll(/\b(\d{1,2})\b/g)]
+      .map(m => parseInt(m[1]))
+      .filter(n => n >= 1 && n <= 37);
 
-    // 本数字: cells[2]〜cells[8]（7個）
-    for (let i = 2; i <= 8; i++) {
-      const n = parseInt(cells[i]);
-      if (n >= 1 && n <= 37) numbers.push(n);
+    if (entries.length < 3) {
+      console.log(`Row: round=${roundMatch[1]}, date=${dateStr}, nums=${allNums.join(',')}`);
     }
 
-    // ボーナス数字: cells[9]〜cells[10]（2個）
-    for (let i = 9; i <= 10; i++) {
-      const n = parseInt(cells[i]);
-      if (n >= 1 && n <= 37) bonuses.push(n);
-    }
-
-    if (numbers.length === 7) {
+    if (allNums.length >= 7) {
       entries.push({
         round: parseInt(roundMatch[1]),
         date: `${dateMatch[1]}-${String(dateMatch[2]).padStart(2,'0')}-${String(dateMatch[3]).padStart(2,'0')}`,
-        numbers: numbers.sort((a, b) => a - b),
-        bonuses,
+        numbers: allNums.slice(0, 7).sort((a, b) => a - b),
+        bonuses: allNums.slice(7, 9),
       });
     }
   });
 
   console.log(`Parsed ${entries.length} entries`);
-  return entries.sort((a,b) => b.round - a.round);
+  return entries.sort((a, b) => b.round - a.round);
 }
 
-// ========== Firestore保存 ==========
 async function saveToFirestore(entry) {
-  const docId = `round_${entry.round}`;
+  const docId = `round_${String(entry.round).padStart(4, '0')}`;
   const url = `${FIRESTORE_BASE}/loto7_entries/${docId}?key=${FIREBASE_API_KEY}`;
 
   const body = {
@@ -80,14 +62,10 @@ async function saveToFirestore(entry) {
       round: { integerValue: String(entry.round) },
       date: { stringValue: entry.date },
       numbers: {
-        arrayValue: {
-          values: entry.numbers.map(n => ({ integerValue: String(n) }))
-        }
+        arrayValue: { values: entry.numbers.map(n => ({ integerValue: String(n) })) }
       },
       bonuses: {
-        arrayValue: {
-          values: entry.bonuses.map(n => ({ integerValue: String(n) }))
-        }
+        arrayValue: { values: (entry.bonuses || []).map(n => ({ integerValue: String(n) })) }
       },
       updatedAt: { timestampValue: new Date().toISOString() }
     }
@@ -101,11 +79,10 @@ async function saveToFirestore(entry) {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Firestore error: ${err}`);
+    throw new Error(`Firestore error for round ${entry.round}: ${err}`);
   }
 }
 
-// ========== メイン ==========
 async function main() {
   try {
     const entries = await scrape();
@@ -115,14 +92,15 @@ async function main() {
       process.exit(1);
     }
 
-    // 最新50件を保存
-    const toSave = entries.slice(0, 50);
+    const toSave = entries.slice(0, 100);
     let saved = 0;
 
     for (const entry of toSave) {
       await saveToFirestore(entry);
       saved++;
-      console.log(`Saved: 第${entry.round}回 (${entry.date})`);
+      if (saved <= 3 || saved % 10 === 0) {
+        console.log(`Saved: 第${entry.round}回 (${entry.date}) [${entry.numbers.join(',')}]`);
+      }
     }
 
     console.log(`✅ Done: ${saved} entries saved to Firestore`);
