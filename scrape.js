@@ -20,36 +20,36 @@ async function scrape() {
   const entries = [];
 
   // テーブル行を解析
+  // 構造: 回別 | 抽選日 | 本数字×7 | bonus×2 | 1等口数 | 当せん金 | キャリーオーバー
   $('table tr').each((_, row) => {
     const cells = $(row).find('td').map((_, td) => $(td).text().trim()).get();
 
-    if (cells.length < 10) return;
-
-    const roundMatch = cells[0].match(/^(\d+)$/);
-    const dateMatch = cells[1].match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    // 「第NNN回」パターンを検出
+    const roundMatch = cells[0]?.match(/第(\d+)回/);
+    const dateMatch = cells[1]?.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
 
     if (!roundMatch || !dateMatch) return;
 
     const numbers = [];
     const bonuses = [];
 
+    // 本数字: cells[2]〜cells[8]（7個）
     for (let i = 2; i <= 8; i++) {
       const n = parseInt(cells[i]);
       if (n >= 1 && n <= 37) numbers.push(n);
     }
 
+    // ボーナス数字: cells[9]〜cells[10]（2個）
     for (let i = 9; i <= 10; i++) {
-      if (cells[i]) {
-        const n = parseInt(cells[i]);
-        if (n >= 1 && n <= 37) bonuses.push(n);
-      }
+      const n = parseInt(cells[i]);
+      if (n >= 1 && n <= 37) bonuses.push(n);
     }
 
     if (numbers.length === 7) {
       entries.push({
         round: parseInt(roundMatch[1]),
         date: `${dateMatch[1]}-${String(dateMatch[2]).padStart(2,'0')}-${String(dateMatch[3]).padStart(2,'0')}`,
-        numbers: numbers.sort((a,b) => a-b),
+        numbers: numbers.sort((a, b) => a - b),
         bonuses,
       });
     }
