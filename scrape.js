@@ -16,7 +16,18 @@ async function scrape() {
   if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
 
   const html = await res.text();
+  console.log(`HTML length: ${html.length}`);
+  const hasKai = html.includes('第672回') || html.includes('第671回');
+  console.log(`Contains 第NNN回: ${hasKai}`);
+
   const $ = cheerio.load(html);
+  console.log(`Tables: ${$('table').length}, TR: ${$('table tr').length}`);
+
+  // デバッグ: 最初のTRのセルを表示
+  const firstRow = $('table tr').first();
+  const firstCells = firstRow.find('td').map((_, td) => $(td).text().trim()).get();
+  console.log('First row cells:', firstCells.slice(0, 5));
+
   const entries = [];
 
   // テーブル行を解析
