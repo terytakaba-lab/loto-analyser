@@ -1,0 +1,8 @@
+{
+  "name": "loto7-scraper",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "scrape": "node scrape.js"
+  }
+}

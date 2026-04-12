@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LOTO7 分析・推薦ツール</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #050a14;
+      --surface: #0d1829;
+      --surface2: #111f35;
+      --border: #1a2d4a;
+      --accent: #00d4ff;
+      --accent2: #ff6b35;
+      --text: #e0eeff;
+      --text-dim: #4a6080;
+      --text-mid: #8aaac8;
+      --hot: #ff4d6d;
+      --cold: #4fc3f7;
+      --gold: #ffd700;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Noto Sans JP', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* グリッドノイズ背景 */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px 16px 60px;
+    }
+
+    /* ヘッダー */
+    header {
+      text-align: center;
+      padding: 40px 0 32px;
+    }
+
+    .logo {
+      font-family: 'Space Mono', monospace;
+      font-size: clamp(28px, 6vw, 48px);
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      text-shadow: 0 0 30px rgba(0,212,255,0.4);
+    }
+
+    .logo span {
+      color: var(--accent2);
+    }
+
+    .subtitle {
+      color: var(--text-mid);
+      font-size: 13px;
+      letter-spacing: 0.1em;
+      margin-top: 6px;
+    }
+
+    /* タブ */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: none;
+      border-radius: 7px;
+      color: var(--text-dim);
+      font-family: 'Noto Sans JP', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 700;
+    }
+
+    /* パネル */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* カード */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    /* 推薦ボタン */
+    .btn-recommend {
+      width: 100%;
+      padding: 18px;
+      background: linear-gradient(135deg, var(--accent), #0099cc);
+      border: none;
+      border-radius: 10px;
+      color: var(--bg);
+      font-family: 'Space Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-recommend:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(0,212,255,0.3);
+    }
+
+    .btn-recommend:active { transform: translateY(0); }
+
+    .btn-recommend:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* 推薦結果 */
+    .result-section {
+      display: none;
+      animation: fadeUp 0.4s ease;
+    }
+
+    .result-section.show { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .balls-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin: 16px 0;
+    }
+
+    .ball {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .ball.main {
+      background: radial-gradient(circle at 35% 35%, #1a6fff, #003399);
+      box-shadow: 0 4px 16px rgba(0,80,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+      color: white;
+    }
+
+    .ball.bonus {
+      background: radial-gradient(circle at 35% 35%, #ff6b35, #cc3300);
+      box-shadow: 0 4px 16px rgba(255,80,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+      color: white;
+      width: 44px;
+      height: 44px;
+      font-size: 14px;
+    }
+
+    .ball.hot {
+      background: radial-gradient(circle at 35% 35%, #ff4d6d, #990022);
+      box-shadow: 0 4px 16px rgba(255,0,60,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+
+    .ball.cold {
+      background: radial-gradient(circle at 35% 35%, #4fc3f7, #0077aa);
+      box-shadow: 0 4px 16px rgba(0,180,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+
+    .ball-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-top: 4px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .ball-wrap { text-align: center; }
+
+    /* スコア */
+    .score-display {
+      text-align: center;
+      margin: 16px 0;
+    }
+
+    .score-value {
+      font-family: 'Space Mono', monospace;
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .score-label {
+      font-size: 12px;
+      color: var(--text-mid);
+      margin-top: 4px;
+    }
+
+    .score-bar-wrap {
+      background: var(--surface2);
+      border-radius: 4px;
+      height: 6px;
+      margin: 12px 0;
+    }
+
+    .score-bar {
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      transition: width 0.8s ease;
+    }
+
+    /* スコア内訳 */
+    .score-breakdown {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .score-item {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .score-item-label { color: var(--text-mid); }
+    .score-item-val {
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .score-item-val.zero { color: var(--text-dim); }
+
+    /* 統計 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    /* 出現頻度バー */
+    .freq-section { margin-top: 8px; }
+
+    .freq-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .freq-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: var(--text-mid);
+      width: 24px;
+      text-align: right;
+    }
+
+    .freq-bar-wrap {
+      flex: 1;
+      background: var(--surface2);
+      border-radius: 3px;
+      height: 14px;
+      overflow: hidden;
+    }
+
+    .freq-bar {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    .freq-count {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      width: 28px;
+    }
+
+    /* 履歴 */
+    .history-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .history-row:last-child { border-bottom: none; }
+
+    .history-date {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 80px;
+    }
+
+    .history-balls {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .mini-ball {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      background: radial-gradient(circle at 35% 35%, #1a6fff, #003399);
+      color: white;
+      box-shadow: 0 2px 8px rgba(0,80,255,0.3);
+    }
+
+    .mini-ball.bonus {
+      background: radial-gradient(circle at 35% 35%, #ff6b35, #cc3300);
+      box-shadow: 0 2px 8px rgba(255,80,0,0.3);
+      width: 26px;
+      height: 26px;
+      font-size: 10px;
+    }
+
+    /* ローディング */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-dim);
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 空状態 */
+    .empty {
+      text-align: center;
+      padding: 32px;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    /* セクション区切り */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* レンジ表示 */
+    .range-chart {
+      display: flex;
+      gap: 4px;
+      margin: 8px 0;
+    }
+
+    .range-block {
+      flex: 1;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--surface2);
+      transition: background 0.3s;
+    }
+
+    .range-block.filled {
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+    }
+
+    /* モバイル最適化 */
+    @media (max-width: 480px) {
+      .score-breakdown { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .ball { width: 44px; height: 44px; font-size: 14px; }
+      .ball.bonus { width: 38px; height: 38px; font-size: 12px; }
+    }
+
+    /* ステータスバッジ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .badge.hot { background: rgba(255,77,109,0.2); color: var(--hot); border: 1px solid rgba(255,77,109,0.3); }
+    .badge.cold { background: rgba(79,195,247,0.2); color: var(--cold); border: 1px solid rgba(79,195,247,0.3); }
+    .badge.info { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+
+    .badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+
+    /* データ状態表示 */
+    .data-status {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      margin-right: 4px;
+    }
+    .dot.green { background: #00ff88; }
+    .dot.yellow { background: var(--gold); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">LOTO<span>7</span></div>
+    <div class="subtitle">過去データ分析 × AI推薦エンジン</div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('recommend')">推薦</button>
+    <button class="tab" onclick="switchTab('stats')">統計</button>
+    <button class="tab" onclick="switchTab('history')">当選履歴</button>
+  </div>
+
+  <!-- 推薦パネル -->
+  <div id="panel-recommend" class="panel active">
+
+    <div class="card">
+      <div class="card-title">// 番号推薦設定</div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px; color:var(--text-mid); margin-bottom:10px">推薦モード</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button class="mode-btn active" data-mode="balanced" onclick="setMode(this,'balanced')">バランス型</button>
+          <button class="mode-btn" data-mode="hot" onclick="setMode(this,'hot')">ホット重視</button>
+          <button class="mode-btn" data-mode="cold" onclick="setMode(this,'cold')">コールド重視</button>
+          <button class="mode-btn" data-mode="random" onclick="setMode(this,'random')">ランダム</button>
+        </div>
+      </div>
+
+      <div style="font-size:12px; color:var(--text-mid); margin-bottom:8px">
+        セット数: <span id="set-count-label">1</span>
+      </div>
+      <input type="range" id="set-count" min="1" max="5" value="1"
+        style="width:100%; accent-color:var(--accent); margin-bottom:16px"
+        oninput="document.getElementById('set-count-label').textContent=this.value">
+
+      <button class="btn-recommend" id="btn-gen" onclick="generateNumbers()">
+        ▶ 番号を生成する
+      </button>
+    </div>
+
+    <div id="result-area"></div>
+
+  </div>
+
+  <!-- 統計パネル -->
+  <div id="panel-stats" class="panel">
+    <div class="card">
+      <div class="card-title">// データ概要</div>
+      <div id="stats-overview" class="loading">
+        <div class="spinner"></div>
+        <div>データ読み込み中...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">// 出現頻度ランキング</div>
+      <div id="freq-chart" class="loading">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 履歴パネル -->
+  <div id="panel-history" class="panel">
+    <div class="card">
+      <div class="card-title">// 過去の当選番号</div>
+      <div id="history-list" class="loading">
+        <div class="spinner"></div>
+        <div>データ読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .mode-btn {
+    padding: 7px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-mid);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mode-btn.active {
+    background: rgba(0,212,255,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+
+<script type="module">
+  // ========== Firebase設定 ==========
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc, orderBy, query, limit }
+    from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAKvG3FfI_i1yzg-YFboAFaYcUvhVzz32o",
+    authDomain: "loto7-analyser.firebaseapp.com",
+    projectId: "loto7-analyser",
+    storageBucket: "loto7-analyser.firebasestorage.app",
+    messagingSenderId: "327165017631",
+    appId: "1:327165017631:web:8488ee6b0e8d4855075f2a",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // ========== Cloudflare Worker URL ==========
+  // デプロイ後に差し替え
+  const WORKER_URL = "https://loto7-worker.YOUR_SUBDOMAIN.workers.dev";
+
+  // ========== グローバル状態 ==========
+  let allEntries = [];
+  let selectedMode = "balanced";
+
+  window.switchTab = (tab) => {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      const tabs = ['recommend','stats','history'];
+      t.classList.toggle('active', tabs[i] === tab);
+    });
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`panel-${tab}`).classList.add('active');
+
+    if (tab === 'stats' && allEntries.length > 0) renderStats();
+    if (tab === 'history' && allEntries.length > 0) renderHistory();
+  };
+
+  window.setMode = (btn, mode) => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedMode = mode;
+  };
+
+  // ========== データ読み込み ==========
+  async function loadData() {
+    try {
+      // まずFirestoreから取得
+      const q = query(collection(db, "loto7_entries"), orderBy("round", "desc"), limit(200));
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        allEntries = snap.docs.map(doc => {
+          const d = doc.data();
+          return {
+            round: d.round,
+            date: d.date,
+            numbers: d.numbers || [],
+            bonuses: d.bonuses || [],
+          };
+        });
+        console.log(`Loaded ${allEntries.length} entries from Firestore`);
+      } else {
+        // Firestoreが空ならWorkerからフェッチ
+        await fetchFromWorker();
+      }
+    } catch (err) {
+      console.warn("Firestore error:", err);
+      // フォールバック: サンプルデータ
+      allEntries = getSampleData();
+    }
+
+    renderStats();
+    renderHistory();
+  }
+
+  async function fetchFromWorker() {
+    try {
+      const res = await fetch(`${WORKER_URL}/data`);
+      const data = await res.json();
+      allEntries = data;
+    } catch {
+      allEntries = getSampleData();
+    }
+  }
+
+  // ========== 分析エンジン ==========
+  function analyze(entries) {
+    const freq = new Array(38).fill(0); // index 1-37
+    const recentRounds = entries.slice(0, 20); // 直近20回
+    const recentFreq = new Array(38).fill(0);
+
+    for (const e of entries) {
+      for (const n of e.numbers) freq[n]++;
+      if (e.bonuses) for (const n of e.bonuses) freq[n] += 0.5;
+    }
+
+    for (const e of recentRounds) {
+      for (const n of e.numbers) recentFreq[n]++;
+    }
+
+    const maxFreq = Math.max(...freq.slice(1));
+    const avgFreq = freq.slice(1).reduce((a,b) => a+b, 0) / 37;
+
+    // ホット: 直近20回で平均より多い
+    const hot = [];
+    const cold = [];
+    for (let i = 1; i <= 37; i++) {
+      const recentRate = recentFreq[i] / 20;
+      const overallRate = freq[i] / entries.length;
+      if (recentRate > overallRate * 1.3) hot.push(i);
+      else if (recentFreq[i] === 0) cold.push(i);
+    }
+
+    // 連続未出現回数
+    const lastSeen = new Array(38).fill(999);
+    for (let r = 0; r < entries.length; r++) {
+      for (const n of entries[r].numbers) {
+        if (lastSeen[n] === 999) lastSeen[n] = r;
+      }
+    }
+
+    return { freq, recentFreq, maxFreq, avgFreq, hot, cold, lastSeen };
+  }
+
+  // ========== 推薦アルゴリズム ==========
+  function recommend(mode, analysis) {
+    const { freq, hot, cold, lastSeen } = analysis;
+    const n = allEntries.length;
+    let candidates = [];
+
+    for (let i = 1; i <= 37; i++) {
+      let score = 0;
+      const f = freq[i] / n;
+
+      // 基本スコア: 全体頻度
+      score += f * 100;
+
+      // モード別スコア
+      if (mode === 'hot') {
+        if (hot.includes(i)) score += 50;
+      } else if (mode === 'cold') {
+        if (cold.includes(i)) score += 60;
+        score += Math.min(lastSeen[i], 30); // 長期未出現ほど加点
+      } else if (mode === 'balanced') {
+        // 適度にホット + 適度にコールド
+        if (hot.includes(i)) score += 20;
+        if (cold.includes(i)) score += 15;
+        // レンジ分散のため中間数字を優遇
+        if (i >= 10 && i <= 28) score += 5;
+      } else if (mode === 'random') {
+        score += Math.random() * 100;
+      }
+
+      // ノイズ追加（多様性）
+      score += Math.random() * 15;
+
+      candidates.push({ num: i, score });
+    }
+
+    // スコア順にソート
+    candidates.sort((a, b) => b.score - a.score);
+
+    // レンジ制約（1-37を4レンジに分けてバランス）
+    if (mode !== 'random') {
+      const ranges = [[1,9],[10,18],[19,27],[28,37]];
+      const selected = [];
+      const used = new Set();
+
+      // 各レンジから最低1つ
+      for (const [lo, hi] of ranges) {
+        const best = candidates.find(c => c.num >= lo && c.num <= hi && !used.has(c.num));
+        if (best && selected.length < 7) {
+          selected.push(best.num);
+          used.add(best.num);
+        }
+      }
+
+      // 残りをスコア順で埋める
+      for (const c of candidates) {
+        if (selected.length >= 7) break;
+        if (!used.has(c.num)) {
+          selected.push(c.num);
+          used.add(c.num);
+        }
+      }
+
+      return selected.sort((a,b) => a-b);
+    } else {
+      return candidates.slice(0, 7).map(c => c.num).sort((a,b) => a-b);
+    }
+  }
+
+  // ========== スコアリング ==========
+  function scoreNumbers(nums, analysis) {
+    const { freq, hot, cold } = analysis;
+    const n = allEntries.length;
+    let score = 0;
+    const details = {};
+
+    // 1. 合計値 100-170
+    const sum = nums.reduce((a,b) => a+b, 0);
+    const sumScore = (sum >= 100 && sum <= 170) ? 30 : (sum >= 80 && sum <= 190) ? 15 : 0;
+    score += sumScore;
+    details['合計値'] = { val: sum, score: sumScore };
+
+    // 2. 4レンジ分散
+    const ranges = [[1,9],[10,18],[19,27],[28,37]];
+    const coveredRanges = ranges.filter(([lo,hi]) => nums.some(n => n>=lo && n<=hi)).length;
+    const rangeScore = coveredRanges >= 4 ? 30 : coveredRanges === 3 ? 18 : 6;
+    score += rangeScore;
+    details['レンジ分散'] = { val: `${coveredRanges}/4`, score: rangeScore };
+
+    // 3. ホット番号数
+    const hotCount = nums.filter(n => hot.includes(n)).length;
+    const hotScore = Math.min(hotCount * 7, 20);
+    score += hotScore;
+    details['ホット数字'] = { val: hotCount, score: hotScore };
+
+    // 4. コールド番号数
+    const coldCount = nums.filter(n => cold.includes(n)).length;
+    const coldScore = Math.min(coldCount * 7, 20);
+    score += coldScore;
+    details['コールド数字'] = { val: coldCount, score: coldScore };
+
+    // 最大100点
+    const maxScore = 100;
+    const pct = Math.min(Math.round(score / maxScore * 100), 100);
+
+    return { score: Math.min(score, maxScore), pct, details };
+  }
+
+  // ========== 生成 ==========
+  window.generateNumbers = () => {
+    if (allEntries.length < 10) {
+      alert('データが不足しています。しばらくお待ちください。');
+      return;
+    }
+
+    const btn = document.getElementById('btn-gen');
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+
+    setTimeout(() => {
+      const analysis = analyze(allEntries);
+      const count = parseInt(document.getElementById('set-count').value);
+      const results = [];
+
+      for (let i = 0; i < count; i++) {
+        const nums = recommend(selectedMode, analysis);
+        const scoring = scoreNumbers(nums, analysis);
+        results.push({ nums, scoring, analysis });
+      }
+
+      renderResults(results, analysis);
+
+      btn.disabled = false;
+      btn.textContent = '▶ 番号を生成する';
+    }, 300);
+  };
+
+  // ========== レンダリング ==========
+  function renderResults(results, analysis) {
+    const area = document.getElementById('result-area');
+    const { hot, cold } = analysis;
+
+    area.innerHTML = results.map((r, idx) => {
+      const { nums, scoring } = r;
+      const ballsHtml = nums.map(n => {
+        const cls = hot.includes(n) ? 'hot' : cold.includes(n) ? 'cold' : '';
+        return `<div class="ball-wrap">
+          <div class="ball main ${cls}">${String(n).padStart(2,'0')}</div>
+          <div class="ball-label">${hot.includes(n)?'🔥':cold.includes(n)?'❄':'　'}</div>
+        </div>`;
+      }).join('');
+
+      const breakdownHtml = Object.entries(scoring.details).map(([k,v]) => `
+        <div class="score-item">
+          <span class="score-item-label">${k}</span>
+          <span class="score-item-val ${v.score===0?'zero':''}">${v.val} (+${v.score})</span>
+        </div>
+      `).join('');
+
+      return `
+        <div class="card" style="animation: fadeUp 0.4s ease ${idx*0.1}s both">
+          ${results.length > 1 ? `<div class="card-title">// セット ${idx+1}</div>` : ''}
+          <div class="balls-row">${ballsHtml}</div>
+          <div class="divider">スコア</div>
+          <div class="score-display">
+            <div class="score-value">${scoring.pct}</div>
+            <div class="score-label">/ 100点</div>
+          </div>
+          <div class="score-bar-wrap">
+            <div class="score-bar" style="width:${scoring.pct}%"></div>
+          </div>
+          <div class="score-breakdown">${breakdownHtml}</div>
+          <div class="badges" style="margin-top:12px">
+            ${nums.filter(n=>hot.includes(n)).length>0?`<span class="badge hot">🔥 ホット×${nums.filter(n=>hot.includes(n)).length}</span>`:''}
+            ${nums.filter(n=>cold.includes(n)).length>0?`<span class="badge cold">❄ コールド×${nums.filter(n=>cold.includes(n)).length}</span>`:''}
+            <span class="badge info">合計 ${nums.reduce((a,b)=>a+b,0)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderStats() {
+    if (allEntries.length === 0) return;
+    const analysis = analyze(allEntries);
+    const { freq, maxFreq, hot, cold } = analysis;
+
+    // 概要
+    document.getElementById('stats-overview').innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-num">${allEntries.length}</div>
+          <div class="stat-label">総抽選回数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--hot)">${hot.length}</div>
+          <div class="stat-label">ホット数字</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--cold)">${cold.length}</div>
+          <div class="stat-label">コールド数字</div>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); text-align:center">
+        最終更新: ${allEntries[0]?.date || '-'} (第${allEntries[0]?.round || '-'}回)
+      </div>
+    `;
+
+    // 頻度チャート（上位20）
+    const sorted = Array.from({length:37},(_,i)=>i+1)
+      .sort((a,b) => freq[b]-freq[a])
+      .slice(0, 20);
+
+    document.getElementById('freq-chart').innerHTML = sorted.map(n => {
+      const pct = Math.round(freq[n] / maxFreq * 100);
+      const isHot = hot.includes(n);
+      const isCold = cold.includes(n);
+      const color = isHot ? 'var(--hot)' : isCold ? 'var(--cold)' : 'var(--accent)';
+      return `
+        <div class="freq-row">
+          <div class="freq-num">${String(n).padStart(2,'0')}</div>
+          <div class="freq-bar-wrap">
+            <div class="freq-bar" style="width:${pct}%; background:${color}"></div>
+          </div>
+          <div class="freq-count">${freq[n]}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderHistory() {
+    if (allEntries.length === 0) return;
+    const list = allEntries.slice(0, 30);
+
+    document.getElementById('history-list').innerHTML = list.map(e => `
+      <div class="history-row">
+        <div>
+          <div class="history-date">${e.date}</div>
+          <div style="font-size:10px; color:var(--text-dim); font-family:'Space Mono',monospace">第${e.round}回</div>
+        </div>
+        <div class="history-balls">
+          ${e.numbers.map(n => `<div class="mini-ball">${String(n).padStart(2,'0')}</div>`).join('')}
+          ${(e.bonuses||[]).map(n => `<div class="mini-ball bonus">${String(n).padStart(2,'0')}</div>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ========== サンプルデータ（Firestoreが空の場合） ==========
+  function getSampleData() {
+    // 直近10回分のサンプル（実際はFirestoreから取得）
+    return [
+      { round: 672, date: '2026-04-10', numbers: [7,11,15,19,24,31,36], bonuses: [3,28] },
+      { round: 671, date: '2026-04-03', numbers: [2,9,14,21,26,33,37], bonuses: [5,16] },
+      { round: 670, date: '2026-03-27', numbers: [4,8,13,20,25,30,35], bonuses: [1,22] },
+      { round: 669, date: '2026-03-20', numbers: [6,12,17,23,27,32,34], bonuses: [9,18] },
+      { round: 668, date: '2026-03-13', numbers: [1,5,16,22,28,31,37], bonuses: [7,24] },
+      { round: 667, date: '2026-03-06', numbers: [3,10,15,19,26,33,36], bonuses: [2,20] },
+      { round: 666, date: '2026-02-27', numbers: [8,13,18,24,29,34,37], bonuses: [4,21] },
+      { round: 665, date: '2026-02-20', numbers: [2,7,14,21,27,32,35], bonuses: [6,28] },
+      { round: 664, date: '2026-02-13', numbers: [5,11,16,23,30,33,36], bonuses: [1,19] },
+      { round: 663, date: '2026-02-06', numbers: [3,9,15,20,25,31,37], bonuses: [8,22] },
+    ];
+  }
+
+  // ========== 初期化 ==========
+  loadData();
+</script>
+</body>
+</html>
