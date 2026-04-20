@@ -1,15 +1,7 @@
 name: Loto7 Scraper
 
 on:
-  schedule:
-    # 毎週金曜 21:00 JST (12:00 UTC)
-    - cron: '0 12 * * 5'
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Run mode: scrape (weekly update) or import (full CSV import)'
-        required: false
-        default: 'scrape'
 
 jobs:
   scrape:
@@ -24,14 +16,7 @@ jobs:
       - name: Install dependencies
         run: npm install node-fetch cheerio iconv-lite
 
-     - name: Import CSV (full import)
-        env:
-          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-          FIREBASE_PROJECT_ID: loto7-analyser
-        run: node import_csv.js loto7.csv
-        
-      - name: Import CSV (full import)
-        if: ${{ github.event.inputs.mode == 'import' }}
+      - name: Import CSV
         env:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: loto7-analyser
